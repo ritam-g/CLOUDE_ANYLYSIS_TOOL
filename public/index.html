@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chart Analyzer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
+<style>
+  :root {
+    --bg: #0b0e11;
+    --bg-panel: #12161b;
+    --bg-panel-raised: #171c22;
+    --border: #262c34;
+    --text: #cdd6e0;
+    --text-dim: #7d8894;
+    --text-bright: #f2f5f8;
+    --green: #4fb87a;
+    --red: #e2635f;
+    --blue: #5b9fd6;
+    --mono: "JetBrains Mono", "Fira Code", ui-monospace, Consolas, monospace;
+    --sans: "Inter", -apple-system, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 60px 20px;
+  }
+  .card {
+    width: 100%;
+    max-width: 720px;
+  }
+  .panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 36px;
+    text-align: center;
+  }
+  h1 {
+    font-size: 22px;
+    color: var(--text-bright);
+    margin: 0 0 8px;
+  }
+  p.sub {
+    color: var(--text-dim);
+    font-size: 14px;
+    margin: 0 0 28px;
+    font-family: var(--mono);
+  }
+  button {
+    background: var(--green);
+    color: #06120c;
+    border: none;
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 15px;
+    padding: 14px 34px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform 0.1s ease, opacity 0.2s ease;
+  }
+  button:hover { transform: translateY(-1px); }
+  button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+  .status {
+    margin-top: 18px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text-dim);
+    min-height: 18px;
+  }
+  .status.error { color: var(--red); }
+
+  .results { margin-top: 28px; text-align: left; }
+  .result-card {
+    background: var(--bg-panel-raised);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+  }
+  .result-card .row-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+  .result-card .row-context {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--blue);
+    margin-bottom: 12px;
+  }
+  .result-card .analysis {
+    font-size: 14.5px;
+    color: var(--text);
+    white-space: pre-wrap;
+    line-height: 1.65;
+  }
+  .model-tag {
+    display: inline-block;
+    margin-top: 12px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--text-dim);
+    background: rgba(255,255,255,0.04);
+    padding: 3px 8px;
+    border-radius: 4px;
+  }
+
+  /* Rendered markdown inside analysis */
+  .analysis h1, .analysis h2, .analysis h3 {
+    font-size: 14px;
+    color: var(--text-bright);
+    margin: 14px 0 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    font-family: var(--mono);
+  }
+  .analysis h3:first-child { margin-top: 0; }
+  .analysis p { margin: 0 0 10px; }
+  .analysis ul, .analysis ol { margin: 0 0 10px; padding-left: 20px; }
+  .analysis li { margin-bottom: 4px; }
+  .analysis strong { color: var(--text-bright); }
+  .analysis em { color: var(--text-dim); }
+
+  /* Log panel */
+  .log-panel {
+    background: #000;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-top: 18px;
+    padding: 16px 18px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.8;
+    max-height: 260px;
+    overflow-y: auto;
+    text-align: left;
+    display: none;
+  }
+  .log-panel.visible { display: block; }
+  .log-line { color: var(--text-dim); white-space: pre-wrap; }
+  .log-line.ok { color: var(--green); }
+  .log-line.err { color: var(--red); }
+  .log-panel-label {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--green);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="panel">
+    <h1>Chart Analyzer</h1>
+    <p class="sub">Reads testing_market.xlsx from this folder · one click</p>
+    <button id="analyzeBtn" onclick="runAnalysis()">Analyze</button>
+    <div class="status" id="status"></div>
+    <div class="log-panel" id="logPanel">
+      <div class="log-panel-label">Live log</div>
+      <div id="logLines"></div>
+    </div>
+  </div>
+  <div class="results" id="results"></div>
+</div>
+
+<script>
+async function runAnalysis() {
+  const btn = document.getElementById('analyzeBtn');
+  const status = document.getElementById('status');
+  const resultsEl = document.getElementById('results');
+  const logPanel = document.getElementById('logPanel');
+  const logLines = document.getElementById('logLines');
+
+  btn.disabled = true;
+  status.className = 'status';
+  status.innerHTML = '<span class="spinner"></span>Running analysis...';
+  resultsEl.innerHTML = '';
+  logLines.innerHTML = '';
+  logPanel.classList.add('visible');
+
+  try {
+    const res = await fetch('/analyze');
+    const data = await res.json();
+
+    // Render the step-by-step log regardless of success/failure
+    (data.logs || []).forEach(line => {
+      const div = document.createElement('div');
+      div.className = 'log-line' + (line.includes('✓') ? ' ok' : line.startsWith('ERROR') || line.includes('✗') ? ' err' : '');
+      div.textContent = line;
+      logLines.appendChild(div);
+    });
+    logPanel.scrollTop = logPanel.scrollHeight;
+
+    if (!data.success) {
+      throw new Error(data.error || 'Unknown error');
+    }
+
+    if (data.results.length === 0) {
+      status.textContent = data.message || 'No images found.';
+      btn.disabled = false;
+      return;
+    }
+
+    status.textContent = `Done — analyzed ${data.results.length} image(s).`;
+
+    data.results.forEach(r => {
+      const card = document.createElement('div');
+      card.className = 'result-card';
+      card.innerHTML = `
+        <div class="row-label">Row ${r.row}</div>
+        <div class="row-context">${escapeHtml(r.context)}</div>
+        <div class="analysis">${marked.parse(r.analysis)}</div>
+        <div class="model-tag">${escapeHtml(r.modelUsed)}</div>
+      `;
+      resultsEl.appendChild(card);
+    });
+  } catch (err) {
+    status.className = 'status error';
+    status.textContent = 'Error: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+</script>
+</body>
+</html>
